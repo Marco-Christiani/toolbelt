@@ -15,6 +15,10 @@ from requests.utils import super_len
 from .multipart.encoder import CustomBytesIO, encode_with
 
 
+def IDENTITY(monitor):
+    return monitor
+
+
 class StreamingIterator(object):
 
     """
@@ -52,7 +56,7 @@ class StreamingIterator(object):
     appropriately because the toolbelt will not attempt to guess that for you.
     """
 
-    def __init__(self, size, iterator, encoding='utf-8'):
+    def __init__(self, size, iterator, encoding='utf-8', callback=None):
         #: The expected size of the upload
         self.size = int(size)
 
@@ -60,6 +64,9 @@ class StreamingIterator(object):
             raise ValueError(
                 'The size of the upload must be a positive integer'
                 )
+        self.callback = callback or IDENTITY
+        self.bytes_read = 0
+        self.percent_complete = 0
 
         #: Attribute that requests will check to determine the length of the
         #: body. See bug #80 for more details
@@ -77,7 +84,11 @@ class StreamingIterator(object):
             self._file = _IteratorAsBinaryFile(iterator, encoding)
 
     def read(self, size=-1):
-        return encode_with(self._file.read(size), self.encoding)
+        string = encode_with(self._file.read(size), self.encoding)
+        self.bytes_read += len(string)
+        self.percent_complete = 100*self.bytes_read/self.size
+        self.callback(self)
+        return string
 
 
 class _IteratorAsBinaryFile(object):
